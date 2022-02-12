@@ -1,0 +1,175 @@
+---
+title: "Species Distribution"
+author: "Azeez Olalekan, Baki"
+date: "12/02/2022"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+This analysis is the introduction to one of the main concept in Ecological dynamics. In the analysis, We will be building a simple logistic model to predict the presence and absence of hooded warbler birds.
+
+# Short discription of Warbler birds
+
+The hooded warbler is a New World warbler. It breeds in eastern North America and across the eastern United States and into southernmost Canada. It is migratory, wintering in Central America and the West Indies. Hooded warblers are very rare vagrants to western Europe (Wikipedia). 
+
+![Hooded warbler bird](C:/Users/dell/OneDrive/Documents/R/Ecological/hooded warbler.jpg)
+Loading needed libraries
+
+```{r}
+library(dismo)
+library(dplyr)
+library(ggplot2)
+```
+
+Now, let start by loading the data.
+
+```{r}
+hooded_warbler <- read.csv("hooded_warb_locations.csv")
+str(hooded_warbler)
+head(hooded_warbler)
+```
+
+Let load the current environmental data of where the birds can be found. We will also load the data of the future environmental conditions. NB: The environmental conditions used in the data are Min. temp and Precipitation.
+
+```{r}
+current_ec <- stack("env_current.grd")
+future_ec <- stack("env_forecast.grd")
+
+head(current_ec,5)
+head(future_ec, 5)
+```
+
+Let plot the current environmental conditions to understand better.
+
+```{r}
+plot(current_ec$tmin, main= "Mean Temperature")
+plot(current_ec$precip, main = "Current Precipitation")
+```
+
+So, let get the the environmental condition of the location of our hooded_warbler.
+
+```{r}
+hooded_location <- hooded_warbler %>% select(lon,lat)
+hooded_location_condition <- current_ec %>% extract(hooded_location)
+
+head(hooded_location,3)
+head(hooded_location_condition,3)
+
+hooded_complete_data <- cbind(hooded_warbler, hooded_location_condition)
+
+head(hooded_complete_data)
+
+```
+
+Now, we have all the necessary data in one place. We can proceed to our model building.
+
+# Exploratory Analysis of the Data
+
+```{r, warning=FALSE}
+sum(is.na(hooded_complete_data))
+summary(hooded_complete_data)
+
+
+hooded_complete_data$present_factor <- as.factor(hooded_complete_data$present)
+
+hooded_scatter_plot <- ggplot(data = hooded_complete_data, 
+                              aes(x=tmin, y=precip,
+                                  color= present_factor))+
+                      geom_point()+
+                      ggtitle("Scatter plot")
+hooded_scatter_plot
+
+hooded_barplot <- ggplot(data=hooded_complete_data, 
+                         aes(x=present_factor, y=tmin, color=present))+
+                  geom_col()+
+                  ggtitle("Hooded Frequency")
+hooded_barplot
+
+hooded_hist <- ggplot(data=hooded_complete_data, 
+                      aes(tmin, color= "yellow"))+
+               geom_histogram()+
+               ggtitle("Temperature Distribution")
+hooded_hist
+
+```
+
+#Interpretation 
+Scatter plot shows the present of the birds in the two dimension of the precipitation and temperature. It can be observed that the occurrence of the species is between precipitation of range (90-150) with temp (50-200).
+
+## Logistic Model
+Let get to build the logistic model to predict the presence or absence of the species.
+
+```{r}
+colnames(hooded_complete_data)
+hooded_model <- glm(present_factor~tmin+precip, family = "binomial", 
+                    data = hooded_complete_data)
+summary(hooded_model)
+plot(hooded_model)
+```
+
+\#Evaluation of the Model
+
+```{r}
+presence <- filter(hooded_complete_data, present==1)
+absence <- filter(hooded_complete_data, present==0)
+model_evaluation <- evaluate(presence, absence, hooded_model)
+model_evaluation
+plot(model_evaluation, "ROC")
+```
+
+\#Interpretation of the Evaluation AUC=0.882 shows there is high true positive rate.
+
+\#Prediction for Current conditions
+
+```{r}
+prediction_location <- predict(current_ec,
+                               hooded_model,
+                               type="response")
+prediction_location
+
+plot(prediction_location)
+points(presence[c("lon", "lat")],pch="*", cex= 0.3)
+
+plot(prediction_location,ext=extent(-140,-50, 25, 60))
+points(presence[c("lon", "lat")],pch="*", cex= 0.3)
+```
+
+# Interpretation
+
+From the map, most of the species are found in the locations where the model predicts low probability of occurrence.
+
+\#Using threshold to find the highest probability of occurrence
+
+```{r}
+threshold <- threshold(model_evaluation, stat="prevalence")
+threshold
+
+plot(prediction_location > threshold,ext=extent(-140,-50, 25, 60))
+points(presence[c("lon", "lat")],pch="*", cex= 0.3)
+```
+
+# Interpretation
+
+But when we set the probability to be \>20%, we observed that the model captures most of the current location of the species.
+
+\#\#Prediction for Future Condition
+
+```{r}
+future_location <- predict(future_ec,hooded_model,type="response")
+future_location
+
+plot(future_location,ext=extent(-140,-50, 25, 60))
+points(presence[c("lon", "lat")],pch="*", cex= 0.3)
+
+plot(future_location > tre,ext=extent(-140,-50, 25, 60))
+points(presence[c("lon", "lat")],pch="*", cex= 0.3)
+```
+
+# Interpretation
+
+Based on the future conditions, the species will be seen around in the location but with probability less than 50%. The location that they will be seen with probability > 50% is small.
+
+```{r}
+plot(future_location-prediction_location,ext=extent(-140,-50, 25, 60))
+```
