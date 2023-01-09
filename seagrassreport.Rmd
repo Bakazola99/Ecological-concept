@@ -1,0 +1,289 @@
+---
+title: "Seagrass Report"
+author: "Azeez Olalekan, Baki"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+## Seagrass report on Arcachon bay Lagoon, Southwest France.
+
+The report analysis will be focusing on the spatial and temporal species distribution of the bay. Five sites were sampled in the month of September for the richness of the zostera spp in the bay. The stations sampled are; GGBS (Seagrass Grand bane sud), GCIQ (Seagrass Chenal Ile Ouest), GCE (Seagrass Courbey Est), GCIE (Seagrass Chenal Ile Est) and GCOU (Seagrass Cousse)
+
+# Analysis to be carried out
+
+1.  comparing the species richness of seagrass and sand sediments.
+2.  computing the diversity index of the sites.
+3.  Hierachical clustering and PCA of the sites.
+
+```{r setup, include=TRUE}
+library(vegan)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(ggsci)
+library(writexl)
+library(MVA)
+library(labdsv)
+```
+
+# Diversity index
+
+1.  Shannon-Weiner Index (H)
+2.  Simpson's Index (D)
+3.  Evenness (J)
+
+## COMBINED DATA
+
+```{r}
+arcachon.seagrass <- read.csv("arcachonseagrass22.csv", header=T)
+head(arcachon.seagrass)
+```
+# Species Accummulation Curve
+
+```{r}
+arcachon.acc <- specaccum(comm=arcachon.seagrass[,-1], method = "exact", gamma = "jack2")
+plot(arcachon.acc)
+```
+## Diversity Index
+
+```{r}
+arcachon.richness <- specnumber(x=arcachon.seagrass[,-1])
+arcachon.shannon <- diversity(x=arcachon.seagrass[,-1], index = "shannon")
+arcachon.simpson <- diversity(x=arcachon.seagrass[,-1], index = "simpson")
+arcachon.invsimpson <- diversity(x=arcachon.seagrass[,-1], index = "invsimpson")
+arcachon.evenness <- arcachon.shannon/log(arcachon.richness)
+
+arcachon.diversity <- data.frame(sites = arcachon.seagrass$Sites, 
+                                 richness = arcachon.richness,
+                                 shannon = arcachon.shannon,
+                                 simpson = arcachon.simpson,
+                                 inverse_simpson = arcachon.invsimpson,
+                                 evenness = arcachon.evenness)
+
+arrange(arcachon.diversity, desc(richness))
+
+#write_xlsx(arcachon.diversity, path = "C:\\Users\\dell\\OneDrive\\Documents\\R\\Machine Learning with R\\Arcachon diversity index.xlsx")
+```
+
+The result shows that GCIE2-Chenal Ile Est station B and GCIQ2- Chenal Ile Ouest station B have the large number of species-22 respectively compared to other stations while the lowest abundant species is found in GGBS2 and GCOU2-10 species respectively of seagrass stations. Also, BCIE station A and B have high species richness compared to other sand bane stations.
+
+
+# Estimating the Species in the Sites
+```{r}
+arcachon.estimator <- specpool(arcachon.seagrass[,-1], smallsample = T)
+arcachon.estimator
+```
+The estimator is showing that in our sample, 67 species was found in the sites while if we had sampled extensively, we could have (jack1)88.85+/-7.12 species.
+
+
+## Comparing the species richness
+Since the species richness is different across the stations, it is important to determine if the different is significant.
+
+```{r}
+library(readxl)
+arcachon <- read_xlsx("Arcachon diversity index.xlsx")
+
+bartlett.test(richness~group, data=arcachon)
+bartlett.test(shannon~group, data=arcachon)
+
+kruskal.arcachon<-kruskal.test(richness~group, data=arcachon)
+kruskal.arcachon
+
+kruskal.arcachon1<-kruskal.test(shannon~group, data=arcachon)
+kruskal.arcachon1
+```
+
+To determine if the different in species richness is significant, homogeneity was tested among the data, which resulted in p-value\<0.05, leading to performing non-parametric test Kruskal-Wallis. The result shows significant difference among the stations.
+
+## Hierarchical Clustering
+
+Hierarchical clustering was employed to group the stations in terms similarities. Bray-Curtis dissimilarity was used as the method for the dissimilarity among the stations. Average, Complete and Single linkages was computed to determine the method that best group the stations.
+
+# Average linkage clustering
+
+```{r}
+arcachon.dist <- vegdist(arcachon.seagrass[,-1], method = "bray")
+
+arcachon.clus <- hclust(arcachon.dist, method = "average")
+
+plot(arcachon.clus, 
+     ylab = "Bray-Curtis Dissimilarity", 
+     labels = arcachon.seagrass$Sites, 
+     main = "")
+rect.hclust(arcachon.clus, k=3, border =2)
+
+arcachon.clust.cut <- cutree(arcachon.clus, k=3)
+arcachon.clust.cut
+
+indval.arcachon<- indval(arcachon.seagrass[,-1],arcachon.clust.cut)
+indval.arcachon$indval
+```
+Group 1
+Group 2: Clibanarius.erythropus, Diogenes.pugilator Jujubinus.striatus Syngnathus.typhle
+Group 3
+
+
+# Complete linkage
+
+```{r}
+arcachon.clus.complete <- hclust(arcachon.dist, method = "complete")
+
+plot(arcachon.clus.complete, ylab = "Bray-Curtis Dissimilarity", labels = arcachon.seagrass$Sites, main = "")
+rect.hclust(arcachon.clus.complete, k=5, border =2)
+
+arcachon.clust.cut.complete <- cutree(arcachon.clus.complete, k=5)
+arcachon.clust.cut.complete
+```
+
+# Single linkage
+
+```{r}
+arcachon.clus.single <- hclust(arcachon.dist, method = "single")
+
+plot(arcachon.clus.single, ylab = "Bray-Curtis Dissimilarity", labels = arcachon.seagrass$Sites, main = "")
+rect.hclust(arcachon.clus.single, k=2, border =2)
+
+arcachon.clust.cut.single <- cutree(arcachon.clus.single, k=2)
+arcachon.clust.cut
+```
+
+# To explain the species dissimilarity among the site
+
+```{r}
+adonis2(arcachon.dist~arcachon$group, data = arcachon.seagrass)
+```
+
+The result shows that the sites can explain the dissimilarities in the species observed, p\<0.05
+
+# Principal Component Analysis
+
+```{r}
+pca.arcachon <- prcomp(arcachon.seagrass[-1], scale=T)
+summary(pca.arcachon)
+plot(pca.arcachon, type ="l")
+biplot(pca.arcachon, cex=0.7)
+```
+
+#Using Facto Shiny
+```{r}
+library(Factoshiny)
+pca.arcachon1<-PCA(arcachon.seagrass[,-1], scale =T)
+Factoshiny(pca.arcachon1)
+```
+# Corresponding Analysis
+
+```{r}
+ca.arcachon <- cca(arcachon.seagrass[-1])
+ca.arcachon
+
+ordiplot(ca.arcachon)
+
+dca.arcachon <- decorana(log1p(arcachon.seagrass[-1]))
+dca.arcachon
+```
+
+# For 2021 Data
+
+```{r}
+arcachon.seagrass21 <- read.csv("arcachonseagrass21.csv", header=T)
+#head(arcachon.seagrass21)
+```
+
+```{r}
+arcachon.acc21 <- specaccum(comm=arcachon.seagrass21[,-1], method = "random", permutations = 1000)
+plot(arcachon.acc21)
+```
+
+```{r}
+arcachon.richness21 <- specnumber(x=arcachon.seagrass21[,-1])
+arcachon.shannon21 <- diversity(x=arcachon.seagrass21[,-1], index = "shannon")
+arcachon.simpson21 <- diversity(x=arcachon.seagrass21[,-1], index = "simpson")
+arcachon.invsimpson21 <- diversity(x=arcachon.seagrass21[,-1], index = "invsimpson")
+arcachon.evenness21 <- arcachon.shannon21/log(arcachon.richness21)
+
+arcachon.diversity21 <- data.frame(sites = arcachon.seagrass21$Sites, 
+                                 richness = arcachon.richness21,
+                                 shannon = arcachon.shannon21,
+                                 simpson = arcachon.simpson21,
+                                 inverse_simpson = arcachon.invsimpson21,
+                                 evenness = arcachon.evenness21)
+
+arrange(arcachon.diversity21, desc(richness))
+
+#write_xlsx(arcachon.diversity21, path = "C:\\Users\\dell\\OneDrive\\Documents\\R\\Machine Learning with R\\Arcachon diversity index21.xlsx")
+```
+
+```{r}
+arcachon21 <- read_xlsx("Arcachon diversity index21.xlsx")
+
+bartlett.test(richness~group, data=arcachon21)
+
+kruskal.arcachon21<-kruskal.test(richness~group, data=arcachon21)
+kruskal.arcachon21
+```
+
+```{r}
+arcachon.dist21 <- vegdist(arcachon.seagrass21[,-1], method = "bray")
+
+arcachon.clus21 <- hclust(arcachon.dist21, method = "average")
+
+plot(arcachon.clus21, 
+     ylab = "Bray-Curtis Dissimilarity", 
+     labels = arcachon.seagrass21$Sites, 
+     main = "")
+rect.hclust(arcachon.clus21, k=4, border =2)
+
+arcachon.clust.cut21 <- cutree(arcachon.clus21, k=4)
+arcachon.clust.cut21
+```
+
+```{r}
+arcachon.clus21.1 <- hclust(arcachon.dist21, method = "complete")
+
+plot(arcachon.clus21.1, 
+     ylab = "Bray-Curtis Dissimilarity", 
+     labels = arcachon.seagrass21$Sites, 
+     main = "")
+rect.hclust(arcachon.clus21.1, k=4, border =2)
+
+arcachon.clust.cut21.1 <- cutree(arcachon.clus21.1, k=4)
+arcachon.clust.cut21.1
+```
+
+```{r}
+arcachon.clus21.2 <- hclust(arcachon.dist21, method = "single")
+
+plot(arcachon.clus21.2, 
+     ylab = "Bray-Curtis Dissimilarity", 
+     labels = arcachon.seagrass21$Sites, 
+     main = "")
+rect.hclust(arcachon.clus21.2, k=4, border =2)
+
+arcachon.clust.cut21.2 <- cutree(arcachon.clus21.2, k=4)
+arcachon.clust.cut21.2
+```
+
+```{r}
+pca.arcachon21<-PCA(arcachon.seagrass21[,-1], scale=T)
+Factoshiny(pca.arcachon21)
+```
+
+```{r}
+pca.arcachon21 <- prcomp(arcachon.seagrass21[-1], scale. = T)
+summary(pca.arcachon21)
+plot(pca.arcachon21, type ="l")
+biplot(pca.arcachon21, cex = 0.8)
+```
+
+```{r}
+adonis2(arcachon.dist21~arcachon21$group, data = arcachon.seagrass21)
+```
+
+```{r}
+arcachon.estimator21 <- specpool(arcachon.seagrass21[,-1], smallsample = T)
+arcachon.estimator21
+```
+
